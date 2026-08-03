@@ -361,5 +361,43 @@ export default function OmkarOwner() {
             </div>
             <div className="bg-white p-2 rounded text-xs">
               <p><strong>Subtotal:</strong> ₹{(bill.pricePerGuest * bill.guestCount).toLocaleString('en-IN')}</p>
+            <div>
+              <label className="text-xs font-bold">GST/Tax (%):</label>
+              <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
+              <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
             </div>
-            <
+            <div className="bg-green-100 p-3 rounded border-2 border-green-400">
+              <p className="text-xs font-bold">TOTAL AMOUNT:</p>
+              <p className="text-2xl font-bold text-green-700">₹{getTotal(bill).toLocaleString('en-IN')}</p>
+            </div>
+          </div>
+
+          <button onClick={() => { if (bill.pricePerGuest <= 0) { alert('Price add करो'); return; } updateBillField(bill.id, 'status', 'accepted'); alert('✅ Bill भेज दिया customer को!'); setCurrentPage('ownerDashboard'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">✅ Send Bill to Customer</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'ownerEditBill') {
+    const bill = bookings.find(b => b.id === editingBillId);
+    if (!bill) return null;
+
+    return (
+      <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
+        <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
+          <button onClick={() => setCurrentPage('viewBillOwner')} className="mb-4 text-green-600 font-semibold">← Back</button>
+          <h1 className="text-2xl font-bold mb-2">✏️ Owner Edit</h1>
+          <p className="text-xs text-gray-500 mb-4">📞 अगर customer ने phone पर कुछ बदलने को बोला है, यहाँ से edit करो — customer को दोबारा request करने की जरूरत नहीं.</p>
+
+          <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400 mb-4">
+            <p className="text-xs font-bold text-blue-700 mb-2">🎉 EVENT DETAILS</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs font-bold">Event Date:</label>
+                <input type="date" value={bill.eventDate} onChange={(e) => updateBillField(bill.id, 'eventDate', e.target.value)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-bold">Event Time:</label>
+                <input type="time" value={bill.eventTime} onChange={(e) => updateBillField(bill.id, 'eventTime', e.target.value)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+              </div>
+            
