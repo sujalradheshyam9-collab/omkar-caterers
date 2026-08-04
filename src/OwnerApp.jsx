@@ -361,8 +361,8 @@ export default function OmkarOwner() {
             </div>
             <div className="bg-white p-2 rounded text-xs">
               <p><strong>Subtotal:</strong> ₹{(bill.pricePerGuest * bill.guestCount).toLocaleString('en-IN')}</p>
-            <div>
-              </div>
+            </div>
+               
               <label className="text-xs font-bold">GST/Tax (%):</label>
               <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
               <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
