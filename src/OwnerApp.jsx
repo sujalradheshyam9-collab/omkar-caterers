@@ -362,7 +362,7 @@ export default function OmkarOwner() {
             <div className="bg-white p-2 rounded text-xs">
               <p><strong>Subtotal:</strong> ₹{(bill.pricePerGuest * bill.guestCount).toLocaleString('en-IN')}</p>
             </div>
-               
+            <div>
               <label className="text-xs font-bold">GST/Tax (%):</label>
               <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
               <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
@@ -401,7 +401,122 @@ export default function OmkarOwner() {
                 <label className="text-xs font-bold">Event Time:</label>
                 <input type="time" value={bill.eventTime} onChange={(e) => updateBillField(bill.id, 'eventTime', e.target.value)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
               </div>
-                return (
+              <div>
+                <label className="text-xs font-bold">Guest Count:</label>
+                <input type="number" min={bill.orderType === 'parcel' ? 25 : 50} value={bill.guestCount} onChange={(e) => updateBillField(bill.id, 'guestCount', parseInt(e.target.value) || 0)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => updateBillField(bill.id, 'mealType', 'lunch')} className={`flex-1 py-2 rounded font-bold text-xs ${bill.mealType === 'lunch' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>🍽️ Lunch</button>
+                <button onClick={() => updateBillField(bill.id, 'mealType', 'dinner')} className={`flex-1 py-2 rounded font-bold text-xs ${bill.mealType === 'dinner' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>🍴 Dinner</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-yellow-50 p-3 rounded border-l-4 border-yellow-400 mb-4">
+            <p className="text-xs font-bold text-yellow-700 mb-2">🍽️ MENU ITEMS ({bill.allDishes.length})</p>
+            <div className="bg-white rounded p-2 mb-2 max-h-40 overflow-y-auto border border-yellow-200">
+              {bill.allDishes.map((dish, i) => (
+                <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-gray-100">
+                  <span><strong>{i+1}.</strong> {dish.replace('Own: ', '')}</span>
+                  <button onClick={() => removeDishFromBill(bill.id, i)} className="text-red-600 font-bold px-2">❌</button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input type="text" placeholder="नई dish जोड़ो..." value={newDishText} onChange={(e) => setNewDishText(e.target.value)} className="flex-1 border-2 border-yellow-300 rounded p-2 text-sm" />
+              <button onClick={() => addDishToBill(bill.id)} className="bg-yellow-600 text-white font-bold px-4 rounded text-sm">+ Add</button>
+            </div>
+          </div>
+
+          <div className="bg-green-50 p-4 rounded-lg border-2 border-green-300 mb-4">
+            <p className="text-xs font-bold text-green-700 mb-2">💰 PRICE & GST</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold">Price per Guest:</label>
+                <input type="number" value={bill.pricePerGuest} onChange={(e) => updateBillField(bill.id, 'pricePerGuest', parseInt(e.target.value) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-bold">GST/Tax (%):</label>
+                <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
+                <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
+              </div>
+              <div className="bg-white p-3 rounded border-2 border-green-400">
+                <p className="text-xs font-bold">TOTAL AMOUNT:</p>
+                <p className="text-2xl font-bold text-green-700">₹{getTotal(bill).toLocaleString('en-IN')}</p>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={() => { alert('✅ Bill update हो गया! Changes save हो गए हैं.'); setCurrentPage('ownerDashboard'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">💾 Save Changes</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'viewFeedbackOwner') {
+    const bill = bookings.find(b => b.id === editingBillId);
+    if (!bill || !bill.feedback) return null;
+    const { catering, staff, food, server, text } = bill.feedback;
+    const StarDisplay = ({ rating }) => <div className="flex gap-1">{[1,2,3,4,5].map(i => <span key={i} className={`text-lg ${i <= rating ? 'text-yellow-400' : 'text-gray-300'}`}>★</span>)}</div>;
+    return (
+      <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl my-4">
+          <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
+          <h1 className="text-2xl font-bold mb-4">⭐ Feedback</h1>
+          <p className="text-xs font-bold text-gray-600 mb-4">{bill.customerName} | {bill.eventDate}</p>
+          <div className="space-y-2 text-xs">
+            <div className="bg-orange-50 p-2 rounded border-l-4 border-orange-400"><p className="font-bold text-orange-700">🎉 Catering</p><StarDisplay rating={catering} /></div>
+            <div className="bg-blue-50 p-2 rounded border-l-4 border-blue-400"><p className="font-bold text-blue-700">👥 Staff</p><StarDisplay rating={staff} /></div>
+            <div className="bg-green-50 p-2 rounded border-l-4 border-green-400"><p className="font-bold text-green-700">🍽️ Food</p><StarDisplay rating={food} /></div>
+            <div className="bg-purple-50 p-2 rounded border-l-4 border-purple-400"><p className="font-bold text-purple-700">🚶 Service</p><StarDisplay rating={server} /></div>
+            {text && <div className="bg-gray-50 p-2 rounded border-l-4 border-gray-400"><p className="font-bold text-gray-700 mb-1">✏️ Comment</p><p className="italic text-xs">"{text}"</p></div>}
+          </div>
+          <button onClick={() => setCurrentPage('ownerDashboard')} className="w-full bg-green-600 text-white font-bold py-2 rounded mt-4">← Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'customersList') {
+    const uniquePhones = [...new Set(bookings.map(b => b.customerPhone))];
+    const customersSummary = uniquePhones.map(phone => {
+      const orders = bookings.filter(b => b.customerPhone === phone);
+      const latest = orders[orders.length - 1];
+      const totalSpent = orders.filter(o => o.status === 'accepted').reduce((sum, o) => sum + getTotal(o), 0);
+      return { phone, name: latest.customerName, orderCount: orders.length, totalSpent };
+    }).sort((a, b) => b.orderCount - a.orderCount);
+
+    return (
+      <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
+        <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
+          <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
+          <h1 className="text-2xl font-bold mb-6">👥 All Customers ({customersSummary.length})</h1>
+          {customersSummary.length > 0 ? customersSummary.map((c) => (
+            <div key={c.phone} onClick={() => { setSelectedCustomerPhone(c.phone); setCurrentPage('customerHistory'); }} className="border-2 border-purple-200 bg-purple-50 rounded-lg p-3 mb-3 cursor-pointer hover:border-purple-400">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold">{c.name}</p>
+                  <p className="text-xs text-gray-600">📞 {c.phone}</p>
+                </div>
+                <div className="text-right text-xs">
+                  <p className="font-bold text-purple-700">{c.orderCount} orders</p>
+                  <p className="text-green-600 font-bold">₹{c.totalSpent.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            </div>
+          )) : <p className="text-center text-gray-500 mt-8">📭 अभी कोई customer नहीं</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'customerHistory') {
+    const customerOrders = bookings.filter(b => b.customerPhone === selectedCustomerPhone);
+    if (customerOrders.length === 0) return null;
+    const customerInfo = customerOrders[customerOrders.length - 1];
+    const totalSpent = customerOrders.filter(o => o.status === 'accepted').reduce((sum, o) => sum + getTotal(o), 0);
+
+    return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
@@ -511,4 +626,4 @@ export default function OmkarOwner() {
   }
 
   return null;
-                    }
+}
