@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { db } from './firebaseConfig';
+import { collection, doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Password ka plain text kahin nahi store hota — SHA-256 hash yahan hai.
 // Login ke waqt entered password ko hash karke isse compare kiya jaata hai.
@@ -21,13 +23,19 @@ export default function OmkarOwner() {
   const [lockedUntil, setLockedUntil] = useState(() => parseInt(localStorage.getItem('omkar_owner_locked_until') || '0'));
   const [editingBillId, setEditingBillId] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [bookings, setBookings] = useState(() => JSON.parse(localStorage.getItem('omkar_bookings') || '[]'));
+  const [bookings, setBookings] = useState([]);
   const [confirmModal, setConfirmModal] = useState(null); // { type: 'cancel'|'delete', billId, message }
   const [newDishText, setNewDishText] = useState('');
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState(null);
   const [selectedDayEvents, setSelectedDayEvents] = useState([]);
 
-  useEffect(() => { localStorage.setItem('omkar_bookings', JSON.stringify(bookings)); }, [bookings]);
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
+      const liveBookings = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      setBookings(liveBookings);
+    });
+    return () => unsubscribe();
+  }, []);
   useEffect(() => { localStorage.setItem('omkar_owner_logged_in', isLoggedIn ? 'true' : 'false'); }, [isLoggedIn]);
   useEffect(() => { localStorage.setItem('omkar_owner_failed_attempts', String(failedAttempts)); }, [failedAttempts]);
   useEffect(() => { localStorage.setItem('omkar_owner_locked_until', String(lockedUntil)); }, [lockedUntil]);
@@ -94,32 +102,36 @@ export default function OmkarOwner() {
     setConfirmModal({ type: 'delete', billId, message: 'क्या आप इस bill को permanently delete करना चाहते हैं? यह वापस नहीं आएगा.' });
   };
 
-  const runConfirmedAction = () => {
+  const runConfirmedAction = async () => {
     if (!confirmModal) return;
     const { type, billId } = confirmModal;
     if (type === 'cancel') {
-      setBookings(prev => prev.map(b => b.id === billId ? { ...b, status: 'cancelled' } : b));
+      await updateDoc(doc(db, 'bookings', billId), { status: 'cancelled' });
       setConfirmModal(null);
       setCurrentPage('ownerDashboard');
     } else if (type === 'delete') {
-      setBookings(prev => prev.filter(b => b.id !== billId));
+      await deleteDoc(doc(db, 'bookings', billId));
       setConfirmModal(null);
       setCurrentPage('ownerDashboard');
     }
   };
 
-  const updateBillField = (billId, field, value) => {
-    setBookings(prev => prev.map(b => b.id === billId ? { ...b, [field]: value } : b));
+  const updateBillField = async (billId, field, value) => {
+    await updateDoc(doc(db, 'bookings', billId), { [field]: value });
   };
 
-  const addDishToBill = (billId) => {
+  const addDishToBill = async (billId) => {
     if (!newDishText.trim()) return;
-    setBookings(prev => prev.map(b => b.id === billId ? { ...b, allDishes: [...b.allDishes, newDishText.trim()] } : b));
+    const bill = bookings.find(b => b.id === billId);
+    if (!bill) return;
+    await updateDoc(doc(db, 'bookings', billId), { allDishes: [...bill.allDishes, newDishText.trim()] });
     setNewDishText('');
   };
 
-  const removeDishFromBill = (billId, index) => {
-    setBookings(prev => prev.map(b => b.id === billId ? { ...b, allDishes: b.allDishes.filter((_, i) => i !== index) } : b));
+  const removeDishFromBill = async (billId, index) => {
+    const bill = bookings.find(b => b.id === billId);
+    if (!bill) return;
+    await updateDoc(doc(db, 'bookings', billId), { allDishes: bill.allDishes.filter((_, i) => i !== index) });
   };
 
   const ConfirmModal = () => {
