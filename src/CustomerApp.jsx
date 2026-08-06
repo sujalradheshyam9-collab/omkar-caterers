@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from './firebaseConfig';
-import { collection, addDoc, updateDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc } from 'firebase/firestore';
 
 export default function OmkarCustomer() {
   const [currentPage, setCurrentPage] = useState('home');
@@ -56,18 +56,17 @@ export default function OmkarCustomer() {
     }
   }, []);
 
-  // Firestore se real-time me bookings aur customers sync hote hain.
-  // Jaise hi koi bhi device (customer ya owner) data change kare, sabko turant update mil jaayega.
   useEffect(() => {
-    const unsubBookings = onSnapshot(collection(db, 'bookings'), (snapshot) => {
-      setBookings(snapshot.docs.map(d => ({ ...d.data(), firestoreId: d.id })));
+    const unsubscribeBookings = onSnapshot(collection(db, 'bookings'), (snapshot) => {
+      const liveBookings = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      setBookings(liveBookings);
     });
-    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
-      setCustomers(snapshot.docs.map(d => ({ ...d.data(), firestoreId: d.id })));
+    const unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
+      const liveCustomers = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+      setCustomers(liveCustomers);
     });
-    return () => { unsubBookings(); unsubCustomers(); };
+    return () => { unsubscribeBookings(); unsubscribeCustomers(); };
   }, []);
-
   useEffect(() => { sessionStorage.setItem('omkar_guest_order_ids', JSON.stringify(guestOrderIds)); }, [guestOrderIds]);
 
   const getSavedCustomerByPhone = (phone) => customers.find(c => c.phone === phone);
@@ -131,7 +130,7 @@ export default function OmkarCustomer() {
             <input type="text" placeholder="Name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border-2 border-green-300 rounded-lg p-3" />
             <input type="email" placeholder="Email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className="w-full border-2 border-green-300 rounded-lg p-3" />
             <textarea placeholder="Address (min 15)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} rows="3" className="w-full border-2 border-green-300 rounded-lg p-3" />
-            <button onClick={() => { if (customerName && customerEmail && customerAddress.length >= 15) { addDoc(collection(db, 'customers'), { name: customerName, email: customerEmail, phone: customerPhone, address: customerAddress }); handleLogin(customerName, customerEmail, customerPhone, customerAddress); } else alert('सब भरो'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Continue →</button>
+            <button onClick={async () => { if (customerName && customerEmail && customerAddress.length >= 15) { await addDoc(collection(db, 'customers'), { name: customerName, email: customerEmail, phone: customerPhone, address: customerAddress }); handleLogin(customerName, customerEmail, customerPhone, customerAddress); } else alert('सब भरो'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Continue →</button>
           </div>
         </div>
       </div>
@@ -247,7 +246,8 @@ export default function OmkarCustomer() {
             <p className="text-xs font-bold text-yellow-700">🍽️ MENU ({order.allDishes.length} items)</p>
             <div className="bg-white rounded p-2 mt-2 max-h-40 overflow-y-auto border border-yellow-200">
               {order.allDishes.map((dish, i) => (
-                <p key={i} className="text-xs py-1"><strong>{i+1}.</strong> {dish.replace('Own: ', '')}</p>              ))}
+                <p key={i} className="text-xs py-1"><strong>{i+1}.</strong> {dish.replace('Own: ', '')}</p>
+              ))}
             </div>
           </div>
 
@@ -324,7 +324,7 @@ export default function OmkarCustomer() {
               <div className="flex gap-2">{[1,2,3,4,5].map(i => <button key={i} onClick={() => setServerRating(i)} className={`text-2xl ${i <= serverRating ? 'text-yellow-400' : 'text-gray-300'}`}>★</button>)}</div>
             </div>
             <textarea placeholder="Comment..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows="3" className="w-full border-2 border-green-300 rounded-lg p-3" />
-            <button onClick={() => { const target = bookings.find(b => b.id === editingBillId); if (target?.firestoreId) { updateDoc(doc(db, 'bookings', target.firestoreId), { feedback: { catering: cateringRating, staff: staffRating, food: foodRating, server: serverRating, text: feedbackText } }); } setCateringRating(0); setStaffRating(0); setFoodRating(0); setServerRating(0); setFeedbackText(''); alert('✅ Feedback submit!'); setCurrentPage('myOrders'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Submit ✅</button>
+            <button onClick={async () => { await updateDoc(doc(db, 'bookings', editingBillId), { feedback: { catering: cateringRating, staff: staffRating, food: foodRating, server: serverRating, text: feedbackText } }); setCateringRating(0); setStaffRating(0); setFoodRating(0); setServerRating(0); setFeedbackText(''); alert('✅ Feedback submit!'); setCurrentPage('myOrders'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Submit ✅</button>
           </div>
         </div>
       </div>
@@ -439,7 +439,7 @@ export default function OmkarCustomer() {
     const courseCategories = [
       { id: 'welcome', label: '🥤 Welcome Drink', example: 'जैसे: Masala Chai, Lassi, Fresh Juice, Nimbu Pani' },
       { id: 'starter', label: '🥗 Starter / Snacks', example: 'जैसे: Pakora, Dhokla, Chaat, Bhel Puri' },
-      { id: 'main', label: '🍛 Main Course (Dal / Sabzi / Rice / Roti / Sides)', example: 'जैसे: Dal Fry, Paneer Sabzi, Mix Veg, Roti, Naan, Jeera Rice, Pulao, Salad, Raita, Papad' },
+      { id: 'main', label: '🍛 Main Course', example: 'जैसे: Dal Fry, Paneer Sabzi, Mix Veg, Roti, Naan, Jeera Rice, Pulao, Salad, Raita, Papad' },
       { id: 'dessert', label: '🍮 Dessert / Sweet', example: 'जैसे: Gulab Jamun, Kheer, Halwa', suggestions: ['Mung Dal Halwa', 'Dahi Wada', 'Shahi Tukda', 'Gulab Jamun', 'Kala Jamun'] },
     ];
 
@@ -496,7 +496,8 @@ export default function OmkarCustomer() {
                       >
                         + {s}
                       </button>
-                    ))}                  </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -582,7 +583,7 @@ export default function OmkarCustomer() {
             </div>
           </div>
           <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
-          <button onClick={() => { const newId = Math.random().toString(36).substr(2, 9); const bill = { id: newId, billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString() }; addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, newId]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
+          <button onClick={async () => { const bill = { billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString() }; const docRef = await addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, docRef.id]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
           <button onClick={() => setCurrentPage('menuSelect')} className="w-full bg-gray-600 text-white font-bold py-2 rounded-lg text-sm">← Back</button>
         </div>
       </div>
@@ -590,4 +591,4 @@ export default function OmkarCustomer() {
   }
 
   return null;
-            }
+}
