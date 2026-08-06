@@ -28,6 +28,13 @@ export default function OmkarOwner() {
   const [newDishText, setNewDishText] = useState('');
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState(null);
   const [selectedDayEvents, setSelectedDayEvents] = useState([]);
+  const [billDraft, setBillDraft] = useState({ pricePerGuest: '0', gstPercent: '0', guestCount: '0' });
+
+  useEffect(() => {
+    const b = bookings.find(x => x.id === editingBillId);
+    if (b) setBillDraft({ pricePerGuest: String(b.pricePerGuest ?? 0), gstPercent: String(b.gstPercent ?? 0), guestCount: String(b.guestCount ?? 0) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingBillId]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
@@ -106,17 +113,20 @@ export default function OmkarOwner() {
     if (!confirmModal) return;
     const { type, billId } = confirmModal;
     if (type === 'cancel') {
+      setBookings(prev => prev.map(b => b.id === billId ? { ...b, status: 'cancelled' } : b));
+      setConfirmModal(null);
+      setCurrentPage('ownerDashboard');
       await updateDoc(doc(db, 'bookings', billId), { status: 'cancelled' });
-      setConfirmModal(null);
-      setCurrentPage('ownerDashboard');
     } else if (type === 'delete') {
-      await deleteDoc(doc(db, 'bookings', billId));
+      setBookings(prev => prev.filter(b => b.id !== billId));
       setConfirmModal(null);
       setCurrentPage('ownerDashboard');
+      await deleteDoc(doc(db, 'bookings', billId));
     }
   };
 
   const updateBillField = async (billId, field, value) => {
+    setBookings(prev => prev.map(b => b.id === billId ? { ...b, [field]: value } : b));
     await updateDoc(doc(db, 'bookings', billId), { [field]: value });
   };
 
@@ -124,17 +134,21 @@ export default function OmkarOwner() {
     if (!newDishText.trim()) return;
     const bill = bookings.find(b => b.id === billId);
     if (!bill) return;
-    await updateDoc(doc(db, 'bookings', billId), { allDishes: [...bill.allDishes, newDishText.trim()] });
+    const updatedDishes = [...bill.allDishes, newDishText.trim()];
+    setBookings(prev => prev.map(b => b.id === billId ? { ...b, allDishes: updatedDishes } : b));
     setNewDishText('');
+    await updateDoc(doc(db, 'bookings', billId), { allDishes: updatedDishes });
   };
 
   const removeDishFromBill = async (billId, index) => {
     const bill = bookings.find(b => b.id === billId);
     if (!bill) return;
-    await updateDoc(doc(db, 'bookings', billId), { allDishes: bill.allDishes.filter((_, i) => i !== index) });
+    const updatedDishes = bill.allDishes.filter((_, i) => i !== index);
+    setBookings(prev => prev.map(b => b.id === billId ? { ...b, allDishes: updatedDishes } : b));
+    await updateDoc(doc(db, 'bookings', billId), { allDishes: updatedDishes });
   };
 
-  const ConfirmModal = () => {
+  const renderConfirmModal = () => {
     if (!confirmModal) return null;
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -216,7 +230,7 @@ export default function OmkarOwner() {
 
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
-        <ConfirmModal />
+        {renderConfirmModal()}
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
           <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
           <div className="flex justify-between items-center mb-6">
@@ -283,7 +297,7 @@ export default function OmkarOwner() {
 
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
-        <ConfirmModal />
+        {renderConfirmModal()}
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
 
@@ -355,7 +369,7 @@ export default function OmkarOwner() {
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('viewBillOwner')} className="mb-4 text-green-600 font-semibold">← Back</button>
-          <h1 className="text-2xl font-bold mb-4">📝 Create Bill</h1>
+         <h1 className="text-2xl font-bold mb-4">📝 Create Bill</h1>
           <p className="text-sm font-bold text-gray-700 mb-4">{bill.customerName} | {bill.eventDate} | {bill.guestCount} guests | {bill.allDishes.length} items</p>
 
           <h3 className="font-bold mb-2 text-sm">🍽️ MENU:</h3>
@@ -369,23 +383,23 @@ export default function OmkarOwner() {
           <div className="space-y-3 mb-4 bg-yellow-50 p-4 rounded border-2 border-yellow-300">
             <div>
               <label className="text-xs font-bold">Price per Guest:</label>
-              <input type="number" value={bill.pricePerGuest} onChange={(e) => updateBillField(bill.id, 'pricePerGuest', parseInt(e.target.value) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" />
+              <input type="number" value={billDraft.pricePerGuest} onChange={(e) => setBillDraft(prev => ({ ...prev, pricePerGuest: e.target.value }))} onBlur={() => updateBillField(bill.id, 'pricePerGuest', parseInt(billDraft.pricePerGuest) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" />
             </div>
             <div className="bg-white p-2 rounded text-xs">
-              <p><strong>Subtotal:</strong> ₹{(bill.pricePerGuest * bill.guestCount).toLocaleString('en-IN')}</p>
+              <p><strong>Subtotal:</strong> ₹{((parseInt(billDraft.pricePerGuest) || 0) * bill.guestCount).toLocaleString('en-IN')}</p>
             </div>
             <div>
               <label className="text-xs font-bold">GST/Tax (%):</label>
-              <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
-              <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
+              <input type="number" step="0.1" value={billDraft.gstPercent} onChange={(e) => setBillDraft(prev => ({ ...prev, gstPercent: e.target.value }))} onBlur={() => updateBillField(bill.id, 'gstPercent', parseFloat(billDraft.gstPercent) || 0)} className="w-full border-2 border-yellow-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
+              <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount({ ...bill, pricePerGuest: parseInt(billDraft.pricePerGuest) || 0, gstPercent: parseFloat(billDraft.gstPercent) || 0 }).toLocaleString('en-IN')}</p>
             </div>
             <div className="bg-green-100 p-3 rounded border-2 border-green-400">
               <p className="text-xs font-bold">TOTAL AMOUNT:</p>
-              <p className="text-2xl font-bold text-green-700">₹{getTotal(bill).toLocaleString('en-IN')}</p>
+              <p className="text-2xl font-bold text-green-700">₹{getTotal({ ...bill, pricePerGuest: parseInt(billDraft.pricePerGuest) || 0, gstPercent: parseFloat(billDraft.gstPercent) || 0 }).toLocaleString('en-IN')}</p>
             </div>
           </div>
 
-          <button onClick={() => { if (bill.pricePerGuest <= 0) { alert('Price add करो'); return; } updateBillField(bill.id, 'status', 'accepted'); alert('✅ Bill भेज दिया customer को!'); setCurrentPage('ownerDashboard'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">✅ Send Bill to Customer</button>
+          <button onClick={() => { const p = parseInt(billDraft.pricePerGuest) || 0; if (p <= 0) { alert('Price add करो'); return; } updateBillField(bill.id, 'pricePerGuest', p); updateBillField(bill.id, 'gstPercent', parseFloat(billDraft.gstPercent) || 0); updateBillField(bill.id, 'status', 'accepted'); alert('✅ Bill भेज दिया customer को!'); setCurrentPage('ownerDashboard'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">✅ Send Bill to Customer</button>
         </div>
       </div>
     );
@@ -415,7 +429,7 @@ export default function OmkarOwner() {
               </div>
               <div>
                 <label className="text-xs font-bold">Guest Count:</label>
-                <input type="number" min={bill.orderType === 'parcel' ? 25 : 50} value={bill.guestCount} onChange={(e) => updateBillField(bill.id, 'guestCount', parseInt(e.target.value) || 0)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+                <input type="number" min={bill.orderType === 'parcel' ? 25 : 50} value={billDraft.guestCount} onChange={(e) => setBillDraft(prev => ({ ...prev, guestCount: e.target.value }))} onBlur={() => updateBillField(bill.id, 'guestCount', parseInt(billDraft.guestCount) || 0)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
               </div>
               <div className="flex gap-2">
                 <button onClick={() => updateBillField(bill.id, 'mealType', 'lunch')} className={`flex-1 py-2 rounded font-bold text-xs ${bill.mealType === 'lunch' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>🍽️ Lunch</button>
@@ -445,21 +459,21 @@ export default function OmkarOwner() {
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold">Price per Guest:</label>
-                <input type="number" value={bill.pricePerGuest} onChange={(e) => updateBillField(bill.id, 'pricePerGuest', parseInt(e.target.value) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" />
+                <input type="number" value={billDraft.pricePerGuest} onChange={(e) => setBillDraft(prev => ({ ...prev, pricePerGuest: e.target.value }))} onBlur={() => updateBillField(bill.id, 'pricePerGuest', parseInt(billDraft.pricePerGuest) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" />
               </div>
               <div>
                 <label className="text-xs font-bold">GST/Tax (%):</label>
-                <input type="number" step="0.1" value={bill.gstPercent || 0} onChange={(e) => updateBillField(bill.id, 'gstPercent', parseFloat(e.target.value) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
-                <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount(bill).toLocaleString('en-IN')}</p>
+                <input type="number" step="0.1" value={billDraft.gstPercent} onChange={(e) => setBillDraft(prev => ({ ...prev, gstPercent: e.target.value }))} onBlur={() => updateBillField(bill.id, 'gstPercent', parseFloat(billDraft.gstPercent) || 0)} className="w-full border-2 border-green-300 rounded p-2 text-lg font-bold mt-1" placeholder="जैसे 5, 12, 18" />
+                <p className="text-xs text-gray-500 mt-1">GST Amount: ₹{getGstAmount({ ...bill, pricePerGuest: parseInt(billDraft.pricePerGuest) || 0, gstPercent: parseFloat(billDraft.gstPercent) || 0, guestCount: parseInt(billDraft.guestCount) || bill.guestCount }).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-white p-3 rounded border-2 border-green-400">
                 <p className="text-xs font-bold">TOTAL AMOUNT:</p>
-                <p className="text-2xl font-bold text-green-700">₹{getTotal(bill).toLocaleString('en-IN')}</p>
+                <p className="text-2xl font-bold text-green-700">₹{getTotal({ ...bill, pricePerGuest: parseInt(billDraft.pricePerGuest) || 0, gstPercent: parseFloat(billDraft.gstPercent) || 0, guestCount: parseInt(billDraft.guestCount) || bill.guestCount }).toLocaleString('en-IN')}</p>
               </div>
             </div>
           </div>
 
-          <button onClick={() => { alert('✅ Bill update हो गया! Changes save हो गए हैं.'); setCurrentPage('ownerDashboard'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">💾 Save Changes</button>
+          <button onClick={() => { updateBillField(bill.id, 'pricePerGuest', parseInt(billDraft.pricePerGuest) || 0); updateBillField(bill.id, 'gstPercent', parseFloat(billDraft.gstPercent) || 0); updateBillField(bill.id, 'guestCount', parseInt(billDraft.guestCount) || bill.guestCount); alert('✅ Bill update हो गया! Changes save हो गए हैं.'); setCurrentPage('ownerDashboard'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">💾 Save Changes</button>
         </div>
       </div>
     );
@@ -568,7 +582,7 @@ export default function OmkarOwner() {
     const cancelledBills = bookings.filter(b => b.status === 'cancelled');
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
-        <ConfirmModal />
+        {renderConfirmModal()}
         <div className="bg-gradient-to-r from-green-600 to-green-800 text-white p-4 rounded-t-2xl flex justify-between items-center">
           <h1 className="text-2xl font-bold">👑 Owner</h1>
           <div className="flex gap-2">
