@@ -25,6 +25,7 @@ export default function OmkarOwner() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [bookings, setBookings] = useState([]);
   const [confirmModal, setConfirmModal] = useState(null); // { type: 'cancel'|'delete', billId, message }
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
   const [newDishText, setNewDishText] = useState('');
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState(null);
   const [selectedDayEvents, setSelectedDayEvents] = useState([]);
@@ -32,7 +33,7 @@ export default function OmkarOwner() {
 
   useEffect(() => {
     const b = bookings.find(x => x.id === editingBillId);
-    if (b) setBillDraft({ pricePerGuest: String(b.pricePerGuest ?? 0), gstPercent: String(b.gstPercent ?? 0), guestCount: String(b.guestCount ?? 0) });
+    if (b) setBillDraft({ pricePerGuest: String(b.pricePerGuest ?? 0), gstPercent: String(b.gstPercent ?? 0), guestCount: String(b.guestCount ?? 0), eventDate: b.eventDate ?? '', eventTime: b.eventTime ?? '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingBillId]);
 
@@ -113,10 +114,12 @@ export default function OmkarOwner() {
     if (!confirmModal) return;
     const { type, billId } = confirmModal;
     if (type === 'cancel') {
-      setBookings(prev => prev.map(b => b.id === billId ? { ...b, status: 'cancelled' } : b));
+      const reason = cancelReasonInput.trim() || 'कोई कारण नहीं बताया गया';
+      setBookings(prev => prev.map(b => b.id === billId ? { ...b, status: 'cancelled', cancelReason: reason } : b));
       setConfirmModal(null);
+      setCancelReasonInput('');
       setCurrentPage('ownerDashboard');
-      await updateDoc(doc(db, 'bookings', billId), { status: 'cancelled' });
+      await updateDoc(doc(db, 'bookings', billId), { status: 'cancelled', cancelReason: reason });
     } else if (type === 'delete') {
       setBookings(prev => prev.filter(b => b.id !== billId));
       setConfirmModal(null);
@@ -153,9 +156,15 @@ export default function OmkarOwner() {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-          <p className="text-lg font-bold mb-6 text-center">{confirmModal.message}</p>
+          <p className="text-lg font-bold mb-4 text-center">{confirmModal.message}</p>
+          {confirmModal.type === 'cancel' && (
+            <div className="mb-4">
+              <label className="text-xs font-bold">Cancel करने की वजह (customer को दिखेगी):</label>
+              <textarea value={cancelReasonInput} onChange={(e) => setCancelReasonInput(e.target.value)} placeholder="जैसे: Date पर पहले से booking है" className="w-full border-2 border-gray-300 rounded p-2 text-sm mt-1" rows={2} />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => setConfirmModal(null)} className="bg-gray-300 text-gray-800 font-bold py-3 rounded-lg">रहने दो</button>
+            <button onClick={() => { setConfirmModal(null); setCancelReasonInput(''); }} className="bg-gray-300 text-gray-800 font-bold py-3 rounded-lg">रहने दो</button>
             <button onClick={runConfirmedAction} className="bg-red-600 text-white font-bold py-3 rounded-lg">हाँ, करो</button>
           </div>
         </div>
@@ -369,7 +378,7 @@ export default function OmkarOwner() {
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('viewBillOwner')} className="mb-4 text-green-600 font-semibold">← Back</button>
-         <h1 className="text-2xl font-bold mb-4">📝 Create Bill</h1>
+          <h1 className="text-2xl font-bold mb-4">📝 Create Bill</h1>
           <p className="text-sm font-bold text-gray-700 mb-4">{bill.customerName} | {bill.eventDate} | {bill.guestCount} guests | {bill.allDishes.length} items</p>
 
           <h3 className="font-bold mb-2 text-sm">🍽️ MENU:</h3>
@@ -421,11 +430,11 @@ export default function OmkarOwner() {
             <div className="space-y-2">
               <div>
                 <label className="text-xs font-bold">Event Date:</label>
-                <input type="date" value={bill.eventDate} onChange={(e) => updateBillField(bill.id, 'eventDate', e.target.value)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+                <input type="date" value={billDraft.eventDate ?? bill.eventDate} onChange={(e) => setBillDraft(prev => ({ ...prev, eventDate: e.target.value }))} onBlur={() => updateBillField(bill.id, 'eventDate', billDraft.eventDate ?? bill.eventDate)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
               </div>
               <div>
                 <label className="text-xs font-bold">Event Time:</label>
-                <input type="time" value={bill.eventTime} onChange={(e) => updateBillField(bill.id, 'eventTime', e.target.value)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
+                <input type="time" value={billDraft.eventTime ?? bill.eventTime} onChange={(e) => setBillDraft(prev => ({ ...prev, eventTime: e.target.value }))} onBlur={() => updateBillField(bill.id, 'eventTime', billDraft.eventTime ?? bill.eventTime)} className="w-full border-2 border-blue-200 rounded p-2 text-sm mt-1" />
               </div>
               <div>
                 <label className="text-xs font-bold">Guest Count:</label>
@@ -577,9 +586,10 @@ export default function OmkarOwner() {
   }
 
   if (currentPage === 'ownerDashboard') {
-    const pendingBills = bookings.filter(b => b.status === 'pending');
-    const sentBills = bookings.filter(b => b.status === 'accepted');
-    const cancelledBills = bookings.filter(b => b.status === 'cancelled');
+    const sortNewestFirst = (arr) => arr.slice().sort((a, b) => (b.createdAtTs || 0) - (a.createdAtTs || 0));
+    const pendingBills = sortNewestFirst(bookings.filter(b => b.status === 'pending'));
+    const sentBills = sortNewestFirst(bookings.filter(b => b.status === 'accepted'));
+    const cancelledBills = sortNewestFirst(bookings.filter(b => b.status === 'cancelled'));
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         {renderConfirmModal()}
@@ -609,7 +619,7 @@ export default function OmkarOwner() {
                     <button onClick={() => { setEditingBillId(bill.id); setCurrentPage('editBill'); }} className="bg-green-600 text-white font-bold py-2 rounded text-xs">📝 Create Bill</button>
                     <button onClick={() => askCancelBill(bill.id)} className="bg-orange-600 text-white font-bold py-2 rounded text-xs">🚫 Cancel</button>
                   </div>
-                </div>
+                  </div>
               ))}
             </div>
           )}
