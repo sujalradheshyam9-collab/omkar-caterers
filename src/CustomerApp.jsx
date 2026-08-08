@@ -172,9 +172,10 @@ export default function OmkarCustomer() {
   }
 
   if (currentPage === 'myOrders') {
-    const myOrders = customerPhone
+    const myOrders = (customerPhone
       ? bookings.filter(b => b.customerPhone === customerPhone)
-      : bookings.filter(b => guestOrderIds.includes(b.id));
+      : bookings.filter(b => guestOrderIds.includes(b.id))
+    ).slice().sort((a, b) => (b.createdAtTs || 0) - (a.createdAtTs || 0));
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
@@ -190,6 +191,7 @@ export default function OmkarCustomer() {
                   </div>
                   <p className="text-sm">📦 {order.orderType?.toUpperCase() || 'PARTY'} | 📅 {order.eventDate} | 👥 {order.guestCount}</p>
                   <p className="text-sm"><strong>Status:</strong> {order.status === 'accepted' ? '✅ CONFIRMED' : order.status === 'cancelled' ? '🚫 CANCELLED by Owner' : '⏳ PENDING'}</p>
+                  {order.status === 'cancelled' && order.cancelReason && <p className="text-xs text-red-600 mt-1"><strong>वजह:</strong> {order.cancelReason}</p>}
                   {order.status === 'accepted' && <p className="text-sm"><strong>💰 ₹{((order.pricePerGuest * order.guestCount) + ((order.pricePerGuest * order.guestCount) * ((order.gstPercent || 0) / 100))).toLocaleString('en-IN')}</strong> (incl. GST {order.gstPercent || 0}%)</p>}
                   <div className="flex gap-2 mt-2 items-center flex-wrap">
                     <button onClick={() => { setEditingBillId(order.id); setCurrentPage('viewOrderCustomer'); }} className="bg-blue-600 text-white font-bold py-2 px-4 rounded text-sm">👁️ View</button>
@@ -223,6 +225,7 @@ export default function OmkarCustomer() {
             <h2 className="text-lg font-bold text-green-700">OMKAR CATERERS</h2>
             <p className="text-xs text-green-600">✓ 100% PURE VEGETARIAN</p>
             {order.status === 'cancelled' && <p className="text-red-600 font-bold mt-2">🚫 CANCELLED by Owner</p>}
+            {order.status === 'cancelled' && order.cancelReason && <p className="text-xs text-red-500 mt-1">वजह: {order.cancelReason}</p>}
             {order.status === 'pending' && <p className="text-yellow-600 font-bold mt-2">⏳ PENDING (owner से wait है)</p>}
             {order.status === 'accepted' && <p className="text-green-600 font-bold mt-2">✅ CONFIRMED</p>}
           </div>
@@ -549,7 +552,9 @@ export default function OmkarCustomer() {
     const selectedList = Object.entries(selectedDishes).filter(([_, s]) => s).map(([d]) => d);
     const customList = Object.entries(customDishes).filter(([_, v]) => v).map(([cat, dish]) => `${cat}: ${dish}`);
     const allDishes = [...selectedList, ...customList];
-    const billId = `#OMKAR${bookings.filter(b => b.customerPhone === customerPhone).length + 1}`;
+    const billId = customerPhone
+      ? `#OMKAR${bookings.filter(b => b.customerPhone === customerPhone).length + 1}`
+      : `#OMKAR${guestOrderIds.length + 1}`;
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4 overflow-y-auto">
         <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl my-4">
@@ -583,7 +588,7 @@ export default function OmkarCustomer() {
             </div>
           </div>
           <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
-          <button onClick={async () => { const bill = { billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString() }; const docRef = await addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, docRef.id]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
+          <button onClick={async () => { const bill = { billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString(), createdAtTs: Date.now() }; const docRef = await addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, docRef.id]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
           <button onClick={() => setCurrentPage('menuSelect')} className="w-full bg-gray-600 text-white font-bold py-2 rounded-lg text-sm">← Back</button>
         </div>
       </div>
