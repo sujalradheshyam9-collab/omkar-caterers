@@ -2,11 +2,35 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Omkar Caterers</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Omkar Caterers | 100% Pure Vegetarian Catering</title>
+    <meta name="description" content="Omkar Caterers - 100% Pure Vegetarian catering services by Radheshyam Maharaj. Book your party, marriage, or event catering order online." />
+    <meta name="keywords" content="Omkar Caterers, catering, pure vegetarian catering, party catering, marriage catering, Radheshyam Maharaj" />
+
+    <!-- Open Graph tags (for WhatsApp/Facebook link previews) -->
+    <meta property="og:title" content="Omkar Caterers | 100% Pure Vegetarian Catering" />
+    <meta property="og:description" content="Book your party, marriage, or event catering order online with Omkar Caterers." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon-512.png" />
+
+    <!-- PWA / installable-app support -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#16a34a" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Omkar Caterers" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
