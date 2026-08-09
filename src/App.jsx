@@ -3,11 +3,11 @@ import OmkarCustomer from './CustomerApp';
 import OmkarOwner from './OwnerApp';
 
 export default function App() {
-  const [role, setRole] = useState(() => sessionStorage.getItem('omkar_role') || null);
+  const [role, setRole] = useState(() => localStorage.getItem('omkar_role') || null);
 
   useEffect(() => {
-    if (role) sessionStorage.setItem('omkar_role', role);
-    else sessionStorage.removeItem('omkar_role');
+    if (role) localStorage.setItem('omkar_role', role);
+    else localStorage.removeItem('omkar_role');
   }, [role]);
 
   if (!role) {
