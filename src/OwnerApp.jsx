@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { db } from './firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import { collection, doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 
-// Password ka plain text kahin nahi store hota — SHA-256 hash yahan hai.
-// Login ke waqt entered password ko hash karke isse compare kiya jaata hai.
-const OWNER_PASSWORD_HASH = 'd0318ce6ad9c9278e143f6c6aa0770ec989bd0fb1989c99c305130dd59cd152c';
+// Owner sirf password enter karta hai — ye email background mein fixed hai, kabhi UI mein nahi dikhta.
+// Firebase Console mein isी email se ek Authentication user banana hoga.
+const OWNER_EMAIL = 'owner@omkar-caterers.app';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-async function sha256Hex(text) {
-  const enc = new TextEncoder().encode(text);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 export default function OmkarOwner() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('omkar_owner_logged_in') === 'true');
-  const [currentPage, setCurrentPage] = useState(() => localStorage.getItem('omkar_owner_logged_in') === 'true' ? 'ownerDashboard' : 'ownerLogin');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [currentPage, setCurrentPage] = useState('ownerLogin');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [failedAttempts, setFailedAttempts] = useState(() => parseInt(localStorage.getItem('omkar_owner_failed_attempts') || '0'));
@@ -44,7 +40,16 @@ export default function OmkarOwner() {
     });
     return () => unsubscribe();
   }, []);
-  useEffect(() => { localStorage.setItem('omkar_owner_logged_in', isLoggedIn ? 'true' : 'false'); }, [isLoggedIn]);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setIsLoggedIn(!!user);
+      setCurrentPage(user ? 'ownerDashboard' : 'ownerLogin');
+      setAuthChecked(true);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
   useEffect(() => { localStorage.setItem('omkar_owner_failed_attempts', String(failedAttempts)); }, [failedAttempts]);
   useEffect(() => { localStorage.setItem('omkar_owner_locked_until', String(lockedUntil)); }, [lockedUntil]);
 
@@ -62,15 +67,13 @@ export default function OmkarOwner() {
       setLoginError(`बहुत सारी गलत कोशिशें हुईं। कृपया ${getLockRemainingText()} बाद फिर try करें।`);
       return;
     }
-    const enteredHash = await sha256Hex(password);
-    if (enteredHash === OWNER_PASSWORD_HASH) {
-      setIsLoggedIn(true);
-      setCurrentPage('ownerDashboard');
+    try {
+      await signInWithEmailAndPassword(auth, OWNER_EMAIL, password);
       setPassword('');
       setFailedAttempts(0);
       setLockedUntil(0);
       setLoginError('');
-    } else {
+    } catch (err) {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
       setPassword('');
@@ -194,6 +197,10 @@ export default function OmkarOwner() {
         </div>
       </div>
     );
+  }
+
+  if (!authChecked) {
+    return <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center"><p className="text-white font-bold text-lg">⏳ Loading...</p></div>;
   }
 
   if (currentPage === 'ownerLogin') {
@@ -598,7 +605,7 @@ export default function OmkarOwner() {
           <div className="flex gap-2">
             <button onClick={() => setCurrentPage('customersList')} className="text-sm font-bold bg-purple-700 px-3 py-1 rounded">👥 Customers</button>
             <button onClick={() => setCurrentPage('calendarView')} className="text-sm font-bold bg-blue-700 px-3 py-1 rounded">📅 Calendar</button>
-            <button onClick={() => { setIsLoggedIn(false); setCurrentPage('ownerLogin'); setPassword(''); }} className="text-sm font-bold">Logout</button>
+            <button onClick={() => { signOut(auth); setPassword(''); }} className="text-sm font-bold">Logout</button>
           </div>
         </div>
         <div className="bg-white rounded-b-2xl shadow-2xl flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full">
@@ -607,19 +614,16 @@ export default function OmkarOwner() {
               <h2 className="text-base font-bold text-orange-700 mb-3">📋 PENDING ORDERS</h2>
               {pendingBills.map((bill) => (
                 <div key={bill.id} className="border-2 border-yellow-400 rounded-lg p-3 bg-yellow-50 mb-3">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="text-xs">
-                      <p className="font-bold underline cursor-pointer" onClick={() => { setSelectedCustomerPhone(bill.customerPhone); setCurrentPage('customerHistory'); }}>{bill.customerName}</p>
-                      <p className="text-gray-600">{bill.eventDate} | {bill.guestCount} guests | {bill.allDishes.length} items</p>
-                    </div>
-                    <span className="bg-yellow-300 text-yellow-800 px-2 py-1 rounded text-xs font-bold">⏳</span>
+                  <div className="mb-2">
+                    <p className="text-xs font-bold underline cursor-pointer" onClick={() => { setSelectedCustomerPhone(bill.customerPhone); setCurrentPage('customerHistory'); }}>{bill.customerName}</p>
+                    <p className="text-xs text-gray-600">{bill.eventDate} | {bill.guestCount} guests | {bill.allDishes.length} items</p>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button onClick={() => { setEditingBillId(bill.id); setCurrentPage('viewBillOwner'); }} className="bg-blue-600 text-white font-bold py-2 rounded text-xs">👁️ View</button>
                     <button onClick={() => { setEditingBillId(bill.id); setCurrentPage('editBill'); }} className="bg-green-600 text-white font-bold py-2 rounded text-xs">📝 Create Bill</button>
                     <button onClick={() => askCancelBill(bill.id)} className="bg-orange-600 text-white font-bold py-2 rounded text-xs">🚫 Cancel</button>
                   </div>
-                  </div>
+                </div>
               ))}
             </div>
           )}
