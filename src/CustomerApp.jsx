@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebaseConfig';
 import { collection, doc, onSnapshot, addDoc, updateDoc } from 'firebase/firestore';
 
@@ -28,6 +28,12 @@ export default function OmkarCustomer() {
   const [serverRating, setServerRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [guestOrderIds, setGuestOrderIds] = useState(() => JSON.parse(sessionStorage.getItem('omkar_guest_order_ids') || '[]'));
+  const knownBillStatuses = useRef({});
+  const isFirstBookingSnapshot = useRef(true);
+  const customerPhoneRef = useRef('');
+  const guestOrderIdsRef = useRef([]);
+  useEffect(() => { customerPhoneRef.current = customerPhone; }, [customerPhone]);
+  useEffect(() => { guestOrderIdsRef.current = guestOrderIds; }, [guestOrderIds]);
 
   const menuStructure = {
     'Welcome Drinks': ['Masala Chai', 'Lassi', 'Sweet Lassi', 'Fresh Juice', 'Masala Shikanji', 'Nimbu Pani'],
@@ -56,9 +62,46 @@ export default function OmkarCustomer() {
     }
   }, []);
 
+  const playNotifySound = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) { /* audio not available */ }
+  };
+
   useEffect(() => {
     const unsubscribeBookings = onSnapshot(collection(db, 'bookings'), (snapshot) => {
       const liveBookings = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+
+      const myBookings = liveBookings.filter(b => (customerPhoneRef.current && b.customerPhone === customerPhoneRef.current) || guestOrderIdsRef.current.includes(b.id));
+
+      if (!isFirstBookingSnapshot.current) {
+        myBookings.forEach(b => {
+          const prevStatus = knownBillStatuses.current[b.id];
+          if (prevStatus && prevStatus !== b.status) {
+            playNotifySound();
+            if ('Notification' in window && Notification.permission === 'granted') {
+              const msg = b.status === 'accepted' ? `आपका bill ${b.billId} ready है! Total: ₹${((b.pricePerGuest||0)*(b.guestCount||0)*(1+(b.gstPercent||0)/100)).toLocaleString('en-IN')}` : b.status === 'cancelled' ? `आपका order ${b.billId} cancel हो गया है।` : `आपके order ${b.billId} में update आया है।`;
+              new Notification('🔔 Omkar Caterers', { body: msg });
+            }
+          }
+        });
+      } else {
+        isFirstBookingSnapshot.current = false;
+      }
+      const statusMap = {};
+      liveBookings.forEach(b => { statusMap[b.id] = b.status; });
+      knownBillStatuses.current = statusMap;
+
       setBookings(liveBookings);
     });
     const unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
@@ -68,6 +111,12 @@ export default function OmkarCustomer() {
     return () => { unsubscribeBookings(); unsubscribeCustomers(); };
   }, []);
   useEffect(() => { sessionStorage.setItem('omkar_guest_order_ids', JSON.stringify(guestOrderIds)); }, [guestOrderIds]);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const getSavedCustomerByPhone = (phone) => customers.find(c => c.phone === phone);
 
@@ -469,8 +518,7 @@ export default function OmkarCustomer() {
       delete updated[id];
       setOwnMenuDishes(updated);
     };
-
-    return (
+     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('menuSelect')} className="mb-4 text-green-600 font-semibold">← Back</button>
@@ -596,4 +644,4 @@ export default function OmkarCustomer() {
   }
 
   return null;
-}
+} 
