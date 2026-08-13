@@ -675,7 +675,7 @@ export default function OmkarCustomer() {
               <a href="tel:9763824571" className="flex-1 bg-green-600 text-white font-bold py-2 rounded text-center text-xs">📞 Call Now</a>
             </div>
           </div>
-                           <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
+            <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
           <button onClick={async () => { const bill = { billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString(), createdAtTs: Date.now() }; const docRef = await addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, docRef.id]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
           <button onClick={() => setCurrentPage('menuSelect')} className="w-full bg-gray-600 text-white font-bold py-2 rounded-lg text-sm">← Back</button>
         </div>
