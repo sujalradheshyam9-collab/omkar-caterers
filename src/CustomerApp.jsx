@@ -28,12 +28,32 @@ export default function OmkarCustomer() {
   const [serverRating, setServerRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [guestOrderIds, setGuestOrderIds] = useState(() => JSON.parse(sessionStorage.getItem('omkar_guest_order_ids') || '[]'));
-  const knownBillData = useRef({});
-  const isFirstBookingSnapshot = useRef(true);
-  const customerPhoneRef = useRef('');
-  const guestOrderIdsRef = useRef([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const isFirstBookingsLoad = useRef(true);
+  const prevStatusMap = useRef({});
+  const customerPhoneRef = useRef(customerPhone);
+  const guestOrderIdsRef = useRef(guestOrderIds);
   useEffect(() => { customerPhoneRef.current = customerPhone; }, [customerPhone]);
   useEffect(() => { guestOrderIdsRef.current = guestOrderIds; }, [guestOrderIds]);
+
+  const playNotifySound = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1046, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) { /* audio not available — safe to ignore */ }
+  };
 
   const menuStructure = {
     'Welcome Drinks': ['Masala Chai', 'Lassi', 'Sweet Lassi', 'Fresh Juice', 'Masala Shikanji', 'Nimbu Pani'],
@@ -62,71 +82,26 @@ export default function OmkarCustomer() {
     }
   }, []);
 
-  const playNotifySound = () => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(660, ctx.currentTime);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
-    } catch (e) { /* audio not available */ }
-  };
-
   useEffect(() => {
     const unsubscribeBookings = onSnapshot(collection(db, 'bookings'), (snapshot) => {
       const liveBookings = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-      const myBookings = liveBookings.filter(b => (customerPhoneRef.current && b.customerPhone === customerPhoneRef.current) || guestOrderIdsRef.current.includes(b.id));
+      setBookings(liveBookings);
 
-      if (!isFirstBookingSnapshot.current) {
-        myBookings.forEach(b => {
-          const prev = knownBillData.current[b.id];
-          if (prev) {
-            // Status change notification
-            if (prev.status !== b.status) {
-              playNotifySound();
-              if ('Notification' in window && Notification.permission === 'granted') {
-                const msg = b.status === 'accepted' 
-                  ? `आपका bill ${b.billId} ready है! Total: ₹${((b.pricePerGuest||0)*(b.guestCount||0)*(1+(b.gstPercent||0)/100)).toLocaleString('en-IN')}` 
-                  : b.status === 'cancelled' 
-                  ? `आपका order ${b.billId} cancel हो गया है।` 
-                  : `आपके order ${b.billId} में update आया है।`;
-                new Notification('🔔 Omkar Caterers', { body: msg });
-              }
-            }
-            // Payment status change notification
-            const prevPayment = prev.paymentStatus || 'pending';
-            const currPayment = b.paymentStatus || 'pending';
-            if (prevPayment !== currPayment) {
-              playNotifySound();
-              if ('Notification' in window && Notification.permission === 'granted') {
-                const msg = currPayment === 'paid' 
-                  ? `🎉 आपके bill ${b.billId} का payment receive हो गया है! धन्यवाद!`
-                  : `आपके bill ${b.billId} का payment status pending में वापस आ गया है।`;
-                new Notification('🔔 Omkar Caterers', { body: msg });
-              }
-            }
+      if (!isFirstBookingsLoad.current) {
+        liveBookings.forEach((b) => {
+          const isMine = (customerPhoneRef.current && b.customerPhone === customerPhoneRef.current) || (!customerPhoneRef.current && guestOrderIdsRef.current.includes(b.id));
+          const oldStatus = prevStatusMap.current[b.id];
+          if (isMine && oldStatus && oldStatus !== b.status && (b.status === 'accepted' || b.status === 'cancelled')) {
+            playNotifySound();
+            const text = b.status === 'accepted' ? `✅ आपका order #${b.billId} confirm हो गया!` : `🚫 आपका order #${b.billId} cancel हो गया${b.cancelReason ? ' — ' + b.cancelReason : ''}`;
+            setNotifications(prev => [{ id: b.id + '_' + Date.now(), text, time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) }, ...prev].slice(0, 30));
           }
         });
-      } else {
-        isFirstBookingSnapshot.current = false;
       }
-      
-      const dataMap = {};
-      liveBookings.forEach(b => { 
-        dataMap[b.id] = { 
-          status: b.status, 
-          paymentStatus: b.paymentStatus || 'pending' 
-        }; 
-      });
-      knownBillData.current = dataMap;
-
-      setBookings(liveBookings);
+      const newMap = {};
+      liveBookings.forEach((b) => { newMap[b.id] = b.status; });
+      prevStatusMap.current = newMap;
+      isFirstBookingsLoad.current = false;
     });
     const unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
       const liveCustomers = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
@@ -135,12 +110,6 @@ export default function OmkarCustomer() {
     return () => { unsubscribeBookings(); unsubscribeCustomers(); };
   }, []);
   useEffect(() => { sessionStorage.setItem('omkar_guest_order_ids', JSON.stringify(guestOrderIds)); }, [guestOrderIds]);
-
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
 
   const getSavedCustomerByPhone = (phone) => customers.find(c => c.phone === phone);
 
@@ -252,7 +221,28 @@ export default function OmkarCustomer() {
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
-          <button onClick={() => setCurrentPage('mainMenu')} className="mb-4 text-green-600 font-semibold">← Back</button>
+          <div className="flex justify-between items-center mb-4 relative">
+            <button onClick={() => setCurrentPage('mainMenu')} className="text-green-600 font-semibold">← Back</button>
+            <button onClick={() => setShowNotifications(prev => !prev)} className="relative bg-green-600 text-white px-3 py-2 rounded-lg font-bold text-sm">
+              🔔
+              {notifications.length > 0 && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{notifications.length > 9 ? '9+' : notifications.length}</span>}
+            </button>
+            {showNotifications && (
+              <div className="absolute top-full right-0 mt-2 bg-white text-gray-800 rounded-xl shadow-2xl w-80 max-w-[90vw] max-h-96 overflow-y-auto z-50 border">
+                <div className="p-3 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                  <p className="font-bold text-sm">🔔 Notifications</p>
+                  {notifications.length > 0 && <button onClick={() => setNotifications([])} className="text-xs text-red-600 font-bold">Clear all</button>}
+                </div>
+                {notifications.length === 0 && <p className="text-center text-gray-400 text-sm p-6">कोई नया notification नहीं</p>}
+                {notifications.map((n) => (
+                  <div key={n.id} className="p-3 border-b text-sm">
+                    <p>{n.text}</p>
+                    <p className="text-xs text-gray-400 mt-1">{n.time}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <h1 className="text-2xl font-bold mb-6">📋 My Orders</h1>
           {myOrders.length > 0 ? (
             <div className="space-y-4">
@@ -331,7 +321,7 @@ export default function OmkarCustomer() {
             <div className="mb-3 bg-green-50 p-3 rounded border-l-4 border-green-400 text-xs">
               <p className="font-bold text-green-700">💰 PRICING</p>
               <p>₹{order.pricePerGuest}/guest × {order.guestCount} = ₹{subtotal.toLocaleString('en-IN')}</p>
-              <p>GST ({order.gstPercent || 0}%): ₹{(subtotal * ((order.gstPercent || 0) / 100)).toLocaleString('en-IN')}</p>
+               <p>GST ({order.gstPercent || 0}%): ₹{(subtotal * ((order.gstPercent || 0) / 100)).toLocaleString('en-IN')}</p>
               <p className="font-bold text-lg text-green-600">TOTAL: ₹{(subtotal + (subtotal * ((order.gstPercent || 0) / 100))).toLocaleString('en-IN')}</p>
             </div>
           )}
@@ -341,7 +331,7 @@ export default function OmkarCustomer() {
             <p><strong>Name:</strong> Radheshyam Maharaj</p>
             <p className="mb-2"><strong>Phone:</strong> 9763824571 / 9579385895</p>
             <div className="flex gap-2">
-                  <a href="tel:9763824571" className="flex-1 bg-green-600 text-white font-bold py-2 rounded text-center text-xs">📞 Call 9763824571</a>
+              <a href="tel:9763824571" className="flex-1 bg-green-600 text-white font-bold py-2 rounded text-center text-xs">📞 Call 9763824571</a>
               <a href="tel:9579385895" className="flex-1 bg-green-600 text-white font-bold py-2 rounded text-center text-xs">📞 Call 9579385895</a>
             </div>
           </div>
@@ -370,7 +360,6 @@ export default function OmkarCustomer() {
               <div className="bg-green-50 p-3 rounded border-l-4 border-green-400"><p className="text-sm font-bold text-green-700 mb-2">🍽️ Food Quality</p><StarDisplay rating={food} /></div>
               <div className="bg-purple-50 p-3 rounded border-l-4 border-purple-400"><p className="text-sm font-bold text-purple-700 mb-2">🚶 Serving Staff Quality & Behavior</p><StarDisplay rating={server} /></div>
               {text && <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400"><p className="text-sm font-bold text-gray-700 mb-2">✏️ Comments</p><p className="text-sm text-gray-700">{text}</p></div>}
-            </div>
             </div>
             <button onClick={() => setCurrentPage('myOrders')} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mt-4">← Back</button>
           </div>
@@ -403,8 +392,8 @@ export default function OmkarCustomer() {
             <textarea placeholder="Comment..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows="3" className="w-full border-2 border-green-300 rounded-lg p-3" />
             <button onClick={async () => { await updateDoc(doc(db, 'bookings', editingBillId), { feedback: { catering: cateringRating, staff: staffRating, food: foodRating, server: serverRating, text: feedbackText } }); setCateringRating(0); setStaffRating(0); setFoodRating(0); setServerRating(0); setFeedbackText(''); alert('✅ Feedback submit!'); setCurrentPage('myOrders'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg">Submit ✅</button>
           </div>
-          </div>
         </div>
+      </div>
     );
   }
 
@@ -437,7 +426,7 @@ export default function OmkarCustomer() {
             <div>
               <input type="number" min={minGuests} placeholder={`Guests (कम से कम ${minGuests})`} value={guestCount} onChange={(e) => setGuestCount(e.target.value)} className="w-full border-2 border-green-300 rounded-lg p-3" />
               <p className="text-xs text-gray-500 mt-1">📌 {orderType === 'parcel' ? 'Parcel' : 'Party'} के लिए minimum {minGuests} guests होने चाहिए</p>
-              </div>
+            </div>
             <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full border-2 border-green-300 rounded-lg p-3" />
             <input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} className="w-full border-2 border-green-300 rounded-lg p-3" />
             <div className="flex gap-3">
@@ -452,22 +441,6 @@ export default function OmkarCustomer() {
   }
 
   if (currentPage === 'foodPreferences') {
-    return (
-      <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-          <button onClick={() => setCurrentPage('eventDetails')} className="mb-4 text-green-600 font-semibold">← Back</button>
-          <h1 className="text-2xl font-bold mb-6">🍽️ Food Type</h1>
-          <div className="space-y-3">
-            {[{ id: 'jain', label: '🌱 Full Jain' }, { id: 'nonOnionGarlic', label: '🧄 No Onion-Garlic' }, { id: 'spicy', label: '🌶️ Spicy' }, { id: 'medium', label: '👌 Medium' }].map(opt => (
-              <button key={opt.id} onClick={() => setFoodType(opt.id)} className={`w-full py-3 rounded-lg font-bold border-2 ${foodType === opt.id ? 'bg-green-600 text-white' : 'border-green-300'}`}>{opt.label}</button>
-            ))}
-          </div>
-          <button onClick={() => { if (!foodType) alert('Select करो'); else setCurrentPage('menuSelect'); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mt-4">Next →</button>
-        </div>
-      </div>
-    );
-  }
-    if (currentPage === 'foodPreferences') {
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
@@ -534,7 +507,7 @@ export default function OmkarCustomer() {
       { id: 'starter', label: '🥗 Starter / Snacks', example: 'जैसे: Pakora, Dhokla, Chaat, Bhel Puri' },
       { id: 'main', label: '🍛 Main Course', example: 'जैसे: Dal Fry, Paneer Sabzi, Mix Veg, Roti, Naan, Jeera Rice, Pulao, Salad, Raita, Papad' },
       { id: 'dessert', label: '🍮 Dessert / Sweet', example: 'जैसे: Gulab Jamun, Kheer, Halwa', suggestions: ['Mung Dal Halwa', 'Dahi Wada', 'Shahi Tukda', 'Gulab Jamun', 'Kala Jamun'] },
-      ];
+    ];
 
     const dishesByCategory = (catId) => Object.entries(ownMenuDishes).filter(([_, d]) => d.category === catId);
 
@@ -559,7 +532,8 @@ export default function OmkarCustomer() {
       delete updated[id];
       setOwnMenuDishes(updated);
     };
-     return (
+
+    return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
           <button onClick={() => setCurrentPage('menuSelect')} className="mb-4 text-green-600 font-semibold">← Back</button>
@@ -570,7 +544,7 @@ export default function OmkarCustomer() {
             <p className="text-blue-700">Welcome Drink → Starter → Main Course → Bread/Rice → Dessert</p>
             <p className="text-gray-600 mt-1">कोई भी category आपको नहीं चाहिए तो उसे खाली छोड़कर सीधे अगली category पर जा सकते हो — कुछ भी ज़रूरी नहीं है।</p>
           </div>
-          
+
           {courseCategories.map((cat) => (
             <div key={cat.id} className="mb-5 border-2 border-green-200 rounded-lg p-3 bg-green-50">
               <p className="font-bold text-green-700 text-sm">{cat.label}</p>
@@ -607,6 +581,7 @@ export default function OmkarCustomer() {
                   </div>
                 ))}
               </div>
+
               <button onClick={() => addDishToCategory(cat.id)} className="w-full bg-white border-2 border-green-400 text-green-700 font-semibold py-2 rounded-lg text-sm">
                 + {cat.label} जोड़ो
               </button>
@@ -645,7 +620,7 @@ export default function OmkarCustomer() {
       : `#OMKAR${guestOrderIds.length + 1}`;
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center p-4 overflow-y-auto">
-               <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl my-4">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl my-4">
           <div className="text-center mb-4 border-b-2 border-green-300 pb-3">
             <h1 className="text-2xl font-bold text-green-600">🍛 BILL</h1>
             <p className="text-xl font-bold text-green-600 mb-1">{billId}</p>
@@ -675,7 +650,7 @@ export default function OmkarCustomer() {
               <a href="tel:9763824571" className="flex-1 bg-green-600 text-white font-bold py-2 rounded text-center text-xs">📞 Call Now</a>
             </div>
           </div>
-            <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
+          <div className="mb-4 bg-red-50 p-3 rounded border-l-4 border-red-400"><p className="text-xs font-bold text-red-700">⏳ STATUS</p><p className="text-xs text-red-600">PENDING (Owner से price & confirmation का wait है)</p></div>
           <button onClick={async () => { const bill = { billId, customerName: customerName || 'Guest', customerEmail, customerPhone, customerAddress, orderType, eventType, eventDate, eventTime, mealType, guestCount: guests, foodType, allDishes, pricePerGuest: 0, gstPercent: 0, totalAmount: 0, status: 'pending', createdAt: new Date().toLocaleString(), createdAtTs: Date.now() }; const docRef = await addDoc(collection(db, 'bookings'), bill); if (!customerPhone) { setGuestOrderIds(prev => [...prev, docRef.id]); } alert('✅ Order Request भेज दिया! Owner से price का wait करें।'); setCurrentPage('myOrders'); setEventType(null); setEventDate(''); setEventTime(''); setMealType(''); setGuestCount(''); setFoodType(''); setSelectedDishes({}); setCustomDishes({}); setOwnMenuDishes({}); }} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg mb-2">✅ Send Request</button>
           <button onClick={() => setCurrentPage('menuSelect')} className="w-full bg-gray-600 text-white font-bold py-2 rounded-lg text-sm">← Back</button>
         </div>
