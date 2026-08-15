@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebaseConfig';
 import { collection, doc, onSnapshot, addDoc, updateDoc } from 'firebase/firestore';
 
-export default function OmkarCustomer() {
+export default function OmkarCustomer({ onExitRole }) {
   const [currentPage, setCurrentPage] = useState('home');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [bookings, setBookings] = useState([]);
@@ -144,6 +144,7 @@ export default function OmkarCustomer() {
             <button onClick={() => setCurrentPage('customerEntry')} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">👤 Login</button>
             <button onClick={() => setCurrentPage('orderType')} className="w-full bg-gray-600 text-white font-bold py-3 rounded-lg">🚀 Guest</button>
           </div>
+          {onExitRole && <button onClick={onExitRole} className="text-xs text-gray-400 mt-6 underline">🔄 Switch Role (Owner)</button>}
         </div>
       </div>
     );
@@ -321,7 +322,7 @@ export default function OmkarCustomer() {
             <div className="mb-3 bg-green-50 p-3 rounded border-l-4 border-green-400 text-xs">
               <p className="font-bold text-green-700">💰 PRICING</p>
               <p>₹{order.pricePerGuest}/guest × {order.guestCount} = ₹{subtotal.toLocaleString('en-IN')}</p>
-               <p>GST ({order.gstPercent || 0}%): ₹{(subtotal * ((order.gstPercent || 0) / 100)).toLocaleString('en-IN')}</p>
+              <p>GST ({order.gstPercent || 0}%): ₹{(subtotal * ((order.gstPercent || 0) / 100)).toLocaleString('en-IN')}</p>
               <p className="font-bold text-lg text-green-600">TOTAL: ₹{(subtotal + (subtotal * ((order.gstPercent || 0) / 100))).toLocaleString('en-IN')}</p>
             </div>
           )}
