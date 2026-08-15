@@ -9,7 +9,7 @@ const OWNER_EMAIL = 'owner@omkar-caterers.app';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-export default function OmkarOwner() {
+export default function OmkarOwner({ onExitRole }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [currentPage, setCurrentPage] = useState('ownerLogin');
@@ -270,6 +270,7 @@ export default function OmkarOwner() {
           >
             {locked ? `🔒 Locked (${getLockRemainingText()} बाद try करें)` : 'Login'}
           </button>
+          {onExitRole && <button onClick={() => { if (window.confirm('क्या आप Owner से बाहर जाकर Role बदलना चाहते हैं?')) onExitRole(); }} className="w-full text-xs text-gray-400 mt-4 underline">🔄 Switch Role (Customer)</button>}
         </div>
       </div>
     );
@@ -375,7 +376,7 @@ export default function OmkarOwner() {
 
           <div className="mb-3 bg-blue-50 p-3 rounded border-l-4 border-blue-400 text-xs">
             <p className="font-bold text-blue-700">🎉 EVENT</p>
-            <p><strong>{bill.orderType?.toUpperCase() || 'PARTY'} - {bill.eventType?.toUpperCase()}</strong></p>
+     <p><strong>{bill.orderType?.toUpperCase() || 'PARTY'} - {bill.eventType?.toUpperCase()}</strong></p>
             <p>📅 {bill.eventDate} | 🕐 {bill.eventTime}</p>
             <p>👥 {bill.guestCount} guests | 🍽️ {bill.mealType?.toUpperCase()}</p>
             <p>🌱 {bill.foodType?.toUpperCase()}</p>
@@ -641,7 +642,7 @@ export default function OmkarOwner() {
     return (
       <div className="h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col p-4">
         <div className="bg-white rounded-2xl shadow-2xl flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
-          <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
+      <button onClick={() => setCurrentPage('ownerDashboard')} className="mb-4 text-green-600 font-semibold">← Back</button>
           <h1 className="text-2xl font-bold mb-4">📜 Bill History</h1>
 
           <div className="mb-4 bg-gray-50 p-3 rounded-lg border">
@@ -754,4 +755,4 @@ export default function OmkarOwner() {
   }
 
   return null;
-}
+ }
